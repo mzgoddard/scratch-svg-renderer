@@ -7,10 +7,6 @@ const base = {
     entry: {
         'scratch-svg-renderer': './src/index.js'
     },
-    output: {
-        library: 'ScratchSVGRenderer',
-        filename: '[name].js'
-    },
     module: {
         rules: [{
             include: path.resolve('src'),
@@ -26,8 +22,10 @@ const base = {
 module.exports = [
     defaultsDeep(base, {
         output: {
+            library: 'ScratchSVGRenderer',
             libraryTarget: 'umd',
-            path: path.resolve('dist', 'web')
+            path: path.resolve('dist', 'web'),
+            filename: '[name].js'
         },
         module: {
             rules: [{
@@ -43,8 +41,10 @@ module.exports = [
     // For testing only: many features will fail outside a browser
     defaultsDeep(base, {
         output: {
+            library: 'ScratchSVGRenderer',
             libraryTarget: 'commonjs2',
-            path: path.resolve('dist', 'node')
+            path: path.resolve('dist', 'node'),
+            filename: '[name].js'
         },
         module: {
             rules: [{
