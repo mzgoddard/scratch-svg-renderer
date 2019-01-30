@@ -4,6 +4,27 @@ const convertFonts = require('./font-converter');
 const fixupSvgString = require('./fixup-svg-string');
 const transformStrokeWidths = require('./transform-applier');
 
+const canvasContext = (function () {
+    let _canvasContext = null;
+    return function () {
+        if (!_canvasContext) {
+            const canvas = document.createElement('canvas');
+            _canvasContext = [canvas, canvas.getContext('2d')];
+        }
+        return _canvasContext;
+    };
+}());
+
+const createSvgSpot = (function () {
+    let _svgSpot = null;
+    return function () {
+        if (!_svgSpot) {
+            _svgSpot = document.createElement('span');
+        }
+        return _svgSpot;
+    };
+}());
+
 /**
  * Main quirks-mode SVG rendering code.
  */
@@ -15,10 +36,14 @@ class SvgRenderer {
      * @constructor
      */
     constructor (canvas) {
-        this._canvas = canvas || document.createElement('canvas');
-        this._context = this._canvas.getContext('2d');
+        this._canvas = null;
+        this._context = null;
+        // this._canvas = canvas || document.createElement('canvas');
+        // this._context = this._canvas.getContext('2d');
         this._measurements = {x: 0, y: 0, width: 0, height: 0};
         this._cachedImage = null;
+        this._svgDom = null;
+        this._svgTag = null;
     }
 
     /**
@@ -72,6 +97,16 @@ class SvgRenderer {
      *     version 2 to version 3 svg.
      */
     loadString (svgString, fromVersion2) {
+        if (svgString._svgDom) {
+            try {
+            this._measurements = svgString._measurements;
+            this._cachedImage = null;
+            this._svgDom = svgString._svgDom.cloneNode(/* deep */ true);
+            this._svgTag = this._svgDom.documentElement;
+            return;
+            } catch (e) {console.error(e)}
+        }
+
         // New svg string invalidates the cached image
         this._cachedImage = null;
 
@@ -314,16 +349,17 @@ class SvgRenderer {
         // This allows us to use `getBBox` on the page,
         // which returns the full bounding-box of all drawn SVG
         // elements, similar to how Scratch 2.0 did measurement.
-        const svgSpot = document.createElement('span');
+        const svgSpot = createSvgSpot();
         let bbox;
         try {
-            document.body.appendChild(svgSpot);
             svgSpot.appendChild(this._svgTag);
+            document.body.appendChild(svgSpot);
             // Take the bounding box.
             bbox = this._svgTag.getBBox();
         } finally {
             // Always destroy the element, even if, for example, getBBox throws.
             document.body.removeChild(svgSpot);
+            svgSpot.removeChild(this._svgTag);
         }
 
         // Re-parse the SVG from `svgText`. The above DOM becomes
@@ -396,12 +432,14 @@ class SvgRenderer {
             this._drawFromImage(scale, onFinish);
         } else {
             const img = new Image();
-            img.onload = () => {
-                this._cachedImage = img;
-                this._drawFromImage(scale, onFinish);
-            };
+            // img.onload = () => {
+            //     this._cachedImage = img;
+            //     this._drawFromImage(scale, onFinish);
+            // };
             const svgText = this.toString(true /* shouldInjectFonts */);
             img.src = `data:image/svg+xml;utf8,${encodeURIComponent(svgText)}`;
+            this._cachedImage = img;
+            this._drawFromImage(scale, onFinish);
         }
     }
 
@@ -412,6 +450,10 @@ class SvgRenderer {
      **/
     _drawFromImage (scale, onFinish) {
         if (!this._cachedImage) return;
+
+        const [canvas, context] = canvasContext();
+        this._canvas = canvas;
+        this._context = context;
 
         const ratio = this.getDrawRatio() * (Number.isFinite(scale) ? scale : 1);
         const bbox = this._measurements;
@@ -429,6 +471,8 @@ class SvgRenderer {
         if (onFinish) {
             onFinish();
         }
+        this._canvas = null;
+        this._context = null;
     }
 }
 
