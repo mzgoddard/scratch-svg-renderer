@@ -28,6 +28,55 @@ const createSvgSpot = (function () {
     };
 }());
 
+const getImage = (function () {
+    const _images = [];
+
+    return Object.assign(function () {
+        // return new Image();
+        return _images.pop() || new Image();
+    }, {
+        release (image) {
+            console.log(_images.length);
+            _images.push(image);
+        }
+    });
+}());
+
+const thread = (function () {
+    let queue = null;
+    const doJob = function () {
+        queue.shift()();
+        if (queue.length) {
+            Promise.resolve().then(doJob);
+            return;
+        }
+        queue = null;
+        // return (queue.shift()() || Promise.resolve())
+        //     .then(function () {
+        //         if (queue.length) {
+        //             return doJob();
+        //         }
+        //         queue = null;
+        //     });
+    };
+    return {
+        shift (work) {
+            if (!queue) {
+                queue = [];
+                setTimeout(doJob, 1);
+            }
+            queue.unshift(work);
+        },
+        queue (work) {
+            if (!queue) {
+                queue = [];
+                setTimeout(doJob, 1);
+            }
+            queue.push(work);
+        }
+    };
+}());
+
 /**
  * Main quirks-mode SVG rendering code.
  */
@@ -47,6 +96,7 @@ class SvgRenderer {
         this._cachedImage = null;
         this._svgDom = null;
         this._svgTag = null;
+        this._svgText = null;
     }
 
     /**
@@ -104,6 +154,7 @@ class SvgRenderer {
             try {
             this._measurements = svgString._measurements;
             this._cachedImage = null;
+            this._svgText = svgString._svgText;
             this._svgDom = svgString._svgDom.cloneNode(/* deep */ true);
             this._svgTag = this._svgDom.documentElement;
             return;
@@ -112,6 +163,7 @@ class SvgRenderer {
 
         // New svg string invalidates the cached image
         this._cachedImage = null;
+        this._svgText = null;
 
         // Parse string into SVG XML.
         const parser = new DOMParser();
@@ -346,31 +398,32 @@ class SvgRenderer {
      */
     _transformMeasurements () {
         // Save `svgText` for later re-parsing.
-        const svgText = this.toString();
+        // const svgText = this.toString();
 
         // Append the SVG dom to the document.
         // This allows us to use `getBBox` on the page,
         // which returns the full bounding-box of all drawn SVG
         // elements, similar to how Scratch 2.0 did measurement.
         const svgSpot = createSvgSpot();
+        let tempTag = this._svgTag.cloneNode(true);
         let bbox;
         try {
-            svgSpot.appendChild(this._svgTag);
+            svgSpot.appendChild(tempTag);
             // document.body.appendChild(svgSpot);
             // Take the bounding box.
-            bbox = this._svgTag.getBBox();
+            bbox = tempTag.getBBox();
         } finally {
             // Always destroy the element, even if, for example, getBBox throws.
             // document.body.removeChild(svgSpot);
-            svgSpot.removeChild(this._svgTag);
+            svgSpot.removeChild(tempTag);
         }
 
         // Re-parse the SVG from `svgText`. The above DOM becomes
         // unusable/undrawable in browsers once it's appended to the page,
         // perhaps for security reasons?
-        const parser = new DOMParser();
-        this._svgDom = parser.parseFromString(svgText, 'text/xml');
-        this._svgTag = this._svgDom.documentElement;
+        // const parser = new DOMParser();
+        // this._svgDom = parser.parseFromString(svgText, 'text/xml');
+        // this._svgTag = this._svgDom.documentElement;
 
         // Enlarge the bbox from the largest found stroke width
         // This may have false-positives, but at least the bbox will always
@@ -402,12 +455,15 @@ class SvgRenderer {
      * @returns {string} String representing current SVG data.
      */
     toString (shouldInjectFonts) {
-        const serializer = new XMLSerializer();
-        let string = serializer.serializeToString(this._svgDom);
-        if (shouldInjectFonts) {
-            string = inlineSvgFonts(string);
+        if (!this._svgText) {
+            const serializer = new XMLSerializer();
+            let string = serializer.serializeToString(this._svgDom);
+            if (shouldInjectFonts) {
+                string = inlineSvgFonts(string);
+            }
+            this._svgText = string;
         }
-        return string;
+        return this._svgText;
     }
 
     /**
@@ -434,13 +490,35 @@ class SvgRenderer {
         if (this._cachedImage) {
             this._drawFromImage(scale, onFinish);
         } else {
-            const img = new Image();
+            thread.queue(() => {
+            // const img = new Image();
+            const img = getImage();
             img.onload = () => {
-                this._cachedImage = img;
-                this._drawFromImage(scale, onFinish);
+                thread.shift(() => {
+                    this._cachedImage = img;
+                    this._drawFromImage(scale, onFinish);
+                    this._cachedImage.onload = null;
+                    this._cachedImage.src = '';
+                    getImage.release(this._cachedImage);
+                    this._cachedImage = null;
+                });
             };
             const svgText = this.toString(true /* shouldInjectFonts */);
             img.src = `data:image/svg+xml;utf8,${encodeURIComponent(svgText)}`;
+            });
+
+            // this._cachedImage = this._svgTag;
+            // this._drawFromImage(scale, onFinish);
+
+            // const img = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+            // img.onload = () => {
+            //     this._cachedImage = img;
+            //     this._drawFromImage(scale, onFinish);
+            // };
+            // img.onerror = console.error.bind(console);
+            // const svgText = this.toString(true /* shouldInjectFonts */);
+            // img.setAttribute('href', `data:image/svg+xml;utf8,${encodeURIComponent(svgText)}`);
+
             // this._cachedImage = img;
             // this._drawFromImage(scale, onFinish);
             // img.src = 'data:,';
