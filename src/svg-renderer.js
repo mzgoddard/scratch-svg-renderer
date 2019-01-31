@@ -36,7 +36,7 @@ const getImage = (function () {
         return _images.pop() || new Image();
     }, {
         release (image) {
-            console.log(_images.length);
+            // console.log(_images.length);
             _images.push(image);
         }
     });
