@@ -20,6 +20,9 @@ const createSvgSpot = (function () {
     return function () {
         if (!_svgSpot) {
             _svgSpot = document.createElement('span');
+            _svgSpot.style.transform = 'translateZ(0)';
+            _svgSpot.style.height = '0';
+            document.body.appendChild(_svgSpot);
         }
         return _svgSpot;
     };
@@ -353,12 +356,12 @@ class SvgRenderer {
         let bbox;
         try {
             svgSpot.appendChild(this._svgTag);
-            document.body.appendChild(svgSpot);
+            // document.body.appendChild(svgSpot);
             // Take the bounding box.
             bbox = this._svgTag.getBBox();
         } finally {
             // Always destroy the element, even if, for example, getBBox throws.
-            document.body.removeChild(svgSpot);
+            // document.body.removeChild(svgSpot);
             svgSpot.removeChild(this._svgTag);
         }
 
@@ -432,14 +435,16 @@ class SvgRenderer {
             this._drawFromImage(scale, onFinish);
         } else {
             const img = new Image();
-            // img.onload = () => {
-            //     this._cachedImage = img;
-            //     this._drawFromImage(scale, onFinish);
-            // };
+            img.onload = () => {
+                this._cachedImage = img;
+                this._drawFromImage(scale, onFinish);
+            };
             const svgText = this.toString(true /* shouldInjectFonts */);
             img.src = `data:image/svg+xml;utf8,${encodeURIComponent(svgText)}`;
-            this._cachedImage = img;
-            this._drawFromImage(scale, onFinish);
+            // this._cachedImage = img;
+            // this._drawFromImage(scale, onFinish);
+            // img.src = 'data:,';
+            // this._cachedImage = null;
         }
     }
 
