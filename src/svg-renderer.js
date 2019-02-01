@@ -59,20 +59,25 @@ const thread = (function () {
         //         queue = null;
         //     });
     };
+    let soon;
     return {
         shift (work) {
-            if (!queue) {
-                queue = [];
-                setTimeout(doJob, 1);
-            }
-            queue.unshift(work);
+            globalLoop.shift(work);
+            // if (!queue) {
+            //     queue = [];
+            //     soon = soon || soonFactory(doJob);
+            // }
+            // soon();
+            // queue.unshift(work);
         },
         queue (work) {
-            if (!queue) {
-                queue = [];
-                setTimeout(doJob, 1);
-            }
-            queue.push(work);
+            globalLoop.queue(work);
+            // if (!queue) {
+            //     queue = [];
+            //     soon = soon || soonFactory(doJob);
+            // }
+            // soon();
+            // queue.push(work);
         }
     };
 }());
