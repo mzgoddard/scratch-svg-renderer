@@ -4,6 +4,10 @@ const convertFonts = require('./font-converter');
 const fixupSvgString = require('./fixup-svg-string');
 const transformStrokeWidths = require('./transform-applier');
 
+const paper = require('@scratch/paper');
+
+let _project = null;
+
 /**
  * Main quirks-mode SVG rendering code.
  */
@@ -389,13 +393,61 @@ class SvgRenderer {
         if (this._cachedImage) {
             this._drawFromImage(scale, onFinish);
         } else {
-            const img = new Image();
-            img.onload = () => {
-                this._cachedImage = img;
-                this._drawFromImage(scale, onFinish);
-            };
-            const svgText = this.toString(true /* shouldInjectFonts */);
-            img.src = `data:image/svg+xml;utf8,${encodeURIComponent(svgText)}`;
+            if (!this._project) {
+                if (!_project) {
+                    _project = new paper.Project(new paper.Size(300, 150));
+                }
+                this._project = _project;
+                // this._project = new paper.Project(new paper.Size(300, 150));
+            }
+            // this._project.clear();
+            // const img = new Image();
+            // img.onload = () => {
+            //     this._cachedImage = img;
+            //     this._drawFromImage(scale, onFinish);
+            // });
+            const svgText = this.toString(false /* shouldInjectFonts */);
+
+            // img.src = `data:image/svg+xml;utf8,${encodeURIComponent(svgText)}`;
+            const layer = new paper.Layer();
+            layer.visible = false;
+            layer.importSVG(svgText, {
+                // insert: false,
+                onLoad: (item) => {
+                    if (!item) return;
+                    // console.log(item, item.parent);
+                    // item.remove();
+                    console.log(layer.bounds);
+                    // console.log(new XMLSerializer().serializeToString(layer.exportSVG()));
+                    item = new paper.Layer().importSVG(new XMLSerializer().serializeToString(layer.exportSVG()), (item) => {
+                        this._project.addLayer(item);
+                        // item = new paper.Group().importJSON(item.exportJSON());
+                        console.log(item.bounds);
+                        // this._project.activeLayer.addChild(item);
+                        // item = this._project.importJSON(item.exportJSON());
+                        this._cachedImage = item;
+                        this._cachedImage.visible = false;
+                        setTimeout(() => {
+                            setTimeout(() => {
+                                this._drawFromImage(scale, onFinish);
+                            }, 0);
+                        }, 0);
+                    });
+                    // this._project.addLayer(item);
+                    // // item = new paper.Group().importJSON(item.exportJSON());
+                    // console.log(item.bounds);
+                    // // this._project.activeLayer.addChild(item);
+                    // // item = this._project.importJSON(item.exportJSON());
+                    // this._cachedImage = item;
+                    // this._cachedImage.visible = false;
+                    // setTimeout(() => {
+                    //     setTimeout(() => {
+                    //         this._drawFromImage(scale, onFinish);
+                    //     }, 0);
+                    // }, 0);
+                    // console.log(item.exportJSON());
+                },
+            });
         }
     }
 
@@ -411,14 +463,37 @@ class SvgRenderer {
         const bbox = this._measurements;
         this._canvas.width = bbox.width * ratio;
         this._canvas.height = bbox.height * ratio;
+        // this._project.view.element.width = bbox.width * ratio;
+        // this._project.view.element.height = bbox.height * ratio;
+        this._project.view.viewSize.set(bbox.width * ratio, bbox.height * ratio);
         this._context.clearRect(0, 0, this._canvas.width, this._canvas.height);
-        this._context.scale(ratio, ratio);
-        this._context.drawImage(this._cachedImage, 0, 0);
+        if (bbox.width === 0 || bbox.height === 0) return;
+        // this._context.scale(ratio, ratio);
+        // this._context.drawImage(this._cachedImage, 0, 0);
+        // this._project.view.fitBounds(this._cachedImage.strokeBounds);
+        // this._project.view.transform(new paper.Matrix().translate(this._cachedImage.bounds.center).scale(this._cachedImage.bounds.width, this._cachedImage.bounds.height));
+        this._project.view.matrix.reset();
+        // this._project.view.scale(1 / 10, new paper.Point(0, 0));
+        // const ri = new Image();
+        // ri.src = this._cachedImage.rasterize().canvas.toDataURL();
+        // document.body.appendChild(ri);
+        // this._cachedImage.fitBounds(this._project.view.bounds);
+        // this._cachedImage.fitBounds(this._cachedImage.strokeBounds);
+        // console.log(this._project.view.viewSize, bbox, this._project.view.matrix, this._cachedImage.bounds);
+        // this._project.addLayer(this._cachedImage);
+        this._cachedImage.visible = true;
+        this._project.view.update();
+        this._context.drawImage(this._project.view.element, 0, 0);
+        this._cachedImage.visible = false;
+        // this._cachedImage.remove();
         // Reset the canvas transform after drawing.
         this._context.setTransform(1, 0, 0, 1, 0, 0);
         // Set the CSS style of the canvas to the actual measurements.
         this._canvas.style.width = bbox.width;
         this._canvas.style.height = bbox.height;
+        const img = new Image();
+        img.src = this._canvas.toDataURL();
+        document.body.appendChild(img);
         // All finished - call the callback if provided.
         if (onFinish) {
             onFinish();
