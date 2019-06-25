@@ -410,6 +410,7 @@ class SvgRenderer {
 
             // img.src = `data:image/svg+xml;utf8,${encodeURIComponent(svgText)}`;
             const layer = new paper.Layer();
+            // _project.addLayer(layer);
             layer.visible = false;
             layer.importSVG(svgText, {
                 // insert: false,
@@ -419,32 +420,34 @@ class SvgRenderer {
                     // item.remove();
                     console.log(layer.bounds);
                     // console.log(new XMLSerializer().serializeToString(layer.exportSVG()));
-                    item = new paper.Layer().importSVG(new XMLSerializer().serializeToString(layer.exportSVG()), (item) => {
-                        this._project.addLayer(item);
-                        // item = new paper.Group().importJSON(item.exportJSON());
-                        console.log(item.bounds);
-                        // this._project.activeLayer.addChild(item);
-                        // item = this._project.importJSON(item.exportJSON());
-                        this._cachedImage = item;
-                        this._cachedImage.visible = false;
-                        setTimeout(() => {
-                            setTimeout(() => {
-                                this._drawFromImage(scale, onFinish);
-                            }, 0);
-                        }, 0);
-                    });
-                    // this._project.addLayer(item);
+
+                    // item = new paper.Layer().importSVG(new XMLSerializer().serializeToString(layer.exportSVG()), (item) => {
+                    //     this._project.addLayer(item);
+                    //     // item = new paper.Group().importJSON(item.exportJSON());
+                    //     console.log(item.bounds);
+                    //     // this._project.activeLayer.addChild(item);
+                    //     // item = this._project.importJSON(item.exportJSON());
+                    //     this._cachedImage = item;
+                    //     this._cachedImage.visible = false;
+                    //     setTimeout(() => {
+                    //         setTimeout(() => {
+                    //             this._drawFromImage(scale, onFinish);
+                    //         }, 0);
+                    //     }, 0);
+                    // });
+
+                    this._project.addLayer(layer);
                     // // item = new paper.Group().importJSON(item.exportJSON());
                     // console.log(item.bounds);
                     // // this._project.activeLayer.addChild(item);
                     // // item = this._project.importJSON(item.exportJSON());
-                    // this._cachedImage = item;
-                    // this._cachedImage.visible = false;
-                    // setTimeout(() => {
-                    //     setTimeout(() => {
-                    //         this._drawFromImage(scale, onFinish);
-                    //     }, 0);
-                    // }, 0);
+                    this._cachedImage = item;
+                    this._cachedImage.visible = false;
+                    setTimeout(() => {
+                        setTimeout(() => {
+                            this._drawFromImage(scale, onFinish);
+                        }, 0);
+                    }, 0);
                     // console.log(item.exportJSON());
                 },
             });
