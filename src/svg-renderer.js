@@ -41,7 +41,16 @@ class SvgRenderer {
      * @param {Function} [onFinish] Optional callback for when drawing finished.
      */
     fromString (svgString, scale, onFinish) {
+        if (typeof svgString === 'object') {
+            return this.fromPaper(svgString, scale, onFinish);
+        }
+
         this.loadString(svgString);
+        this._draw(scale, onFinish);
+    }
+
+    fromPaper (paperJson, scale, onFinish) {
+        this.loadPaper(paperJson);
         this._draw(scale, onFinish);
     }
 
@@ -78,6 +87,9 @@ class SvgRenderer {
     loadString (svgString, fromVersion2) {
         // New svg string invalidates the cached image
         this._cachedImage = null;
+        this._cachedJson = null;
+
+        this._svgString = svgString;
 
         // Parse string into SVG XML.
         const parser = new DOMParser();
@@ -115,6 +127,16 @@ class SvgRenderer {
             x: this._svgTag.viewBox.baseVal.x,
             y: this._svgTag.viewBox.baseVal.y
         };
+
+        // console.log(this._measurements);
+        // console.log(this._svgString === this.toString(false));
+        // console.log(this._svgString === this.toString(true));
+    }
+
+    loadPaper (json) {
+        this._cachedImage = null;
+        this._cachedJson = json.paper;
+        this._measurements = json.measurements;
     }
 
     /**
@@ -361,12 +383,53 @@ class SvgRenderer {
      * @returns {string} String representing current SVG data.
      */
     toString (shouldInjectFonts) {
+        // return this._svgString;
+
         const serializer = new XMLSerializer();
         let string = serializer.serializeToString(this._svgDom);
         if (shouldInjectFonts) {
             string = inlineSvgFonts(string);
         }
         return string;
+    }
+
+    toJson () {
+        if (this._cachedJson) {
+            return Promise.resolve({
+                paper: this._cachedJson,
+                measurements: this._measurements
+            });
+        }
+
+        const svgText = this.toString(false /* shouldInjectFonts */);
+
+        return new Promise (resolve => {
+            if (!this._project) {
+                if (!_project) {
+                    _project = new paper.Project(new paper.Size(100, 100));
+                }
+                this._project = _project;
+            }
+
+            this._project.importSVG(svgText, {
+                insert: false,
+                onLoad: (item) => {
+                    if (!item) return;
+
+                    // Give the browser a frame to load embeded raster images.
+                    setTimeout(() => {
+                        this._cachedJson = item.exportJSON({
+                            bounds: 'content'
+                        });
+
+                        resolve({
+                            paper: this._cachedJson,
+                            measurements: this._measurements
+                        });
+                    }, 0);
+                },
+            });
+        });
     }
 
     /**
@@ -398,58 +461,15 @@ class SvgRenderer {
                     _project = new paper.Project(new paper.Size(300, 150));
                 }
                 this._project = _project;
-                // this._project = new paper.Project(new paper.Size(300, 150));
             }
-            // this._project.clear();
-            // const img = new Image();
-            // img.onload = () => {
-            //     this._cachedImage = img;
-            //     this._drawFromImage(scale, onFinish);
-            // });
-            const svgText = this.toString(false /* shouldInjectFonts */);
 
-            // img.src = `data:image/svg+xml;utf8,${encodeURIComponent(svgText)}`;
-            const layer = new paper.Layer();
-            // _project.addLayer(layer);
-            layer.visible = false;
-            layer.importSVG(svgText, {
-                // insert: false,
-                onLoad: (item) => {
-                    if (!item) return;
-                    // console.log(item, item.parent);
-                    // item.remove();
-                    console.log(layer.bounds);
-                    // console.log(new XMLSerializer().serializeToString(layer.exportSVG()));
+            this.toJson().then(() => {
+                this._cachedImage = new paper.Group().importJSON(this._cachedJson, {insert: false});
 
-                    // item = new paper.Layer().importSVG(new XMLSerializer().serializeToString(layer.exportSVG()), (item) => {
-                    //     this._project.addLayer(item);
-                    //     // item = new paper.Group().importJSON(item.exportJSON());
-                    //     console.log(item.bounds);
-                    //     // this._project.activeLayer.addChild(item);
-                    //     // item = this._project.importJSON(item.exportJSON());
-                    //     this._cachedImage = item;
-                    //     this._cachedImage.visible = false;
-                    //     setTimeout(() => {
-                    //         setTimeout(() => {
-                    //             this._drawFromImage(scale, onFinish);
-                    //         }, 0);
-                    //     }, 0);
-                    // });
-
-                    this._project.addLayer(layer);
-                    // // item = new paper.Group().importJSON(item.exportJSON());
-                    // console.log(item.bounds);
-                    // // this._project.activeLayer.addChild(item);
-                    // // item = this._project.importJSON(item.exportJSON());
-                    this._cachedImage = item;
-                    this._cachedImage.visible = false;
-                    setTimeout(() => {
-                        setTimeout(() => {
-                            this._drawFromImage(scale, onFinish);
-                        }, 0);
-                    }, 0);
-                    // console.log(item.exportJSON());
-                },
+                // Give the browser a frame to load embeded raster images.
+                setTimeout(() => {
+                    this._drawFromImage(scale, onFinish);
+                }, 0);
             });
         }
     }
@@ -468,7 +488,17 @@ class SvgRenderer {
         this._canvas.height = bbox.height * ratio;
         // this._project.view.element.width = bbox.width * ratio;
         // this._project.view.element.height = bbox.height * ratio;
+        // this._project.addLayer(this._cachedImage.parent);
+
+        // this._project.addLayer(this._cachedImage.parent);
+        // this._cachedImage.parent.activate();
+        // this._cachedImage.parent.setVisible(true);
+
+        this._project.clear();
         this._project.view.viewSize.set(bbox.width * ratio, bbox.height * ratio);
+
+        this._project.activeLayer.addChild(this._cachedImage);
+
         this._context.clearRect(0, 0, this._canvas.width, this._canvas.height);
         if (bbox.width === 0 || bbox.height === 0) return;
         // this._context.scale(ratio, ratio);
@@ -484,19 +514,28 @@ class SvgRenderer {
         // this._cachedImage.fitBounds(this._cachedImage.strokeBounds);
         // console.log(this._project.view.viewSize, bbox, this._project.view.matrix, this._cachedImage.bounds);
         // this._project.addLayer(this._cachedImage);
-        this._cachedImage.visible = true;
         this._project.view.update();
+        // debugger;
         this._context.drawImage(this._project.view.element, 0, 0);
-        this._cachedImage.visible = false;
-        // this._cachedImage.remove();
+
+        // this._cachedImage.parent.setVisible(false);
+        this._cachedImage.remove();
+
+        // const rr = new Image();
+        // rr.style.background = 'gray';
+        // rr.src = this._canvas.toDataURL();
+        // document.body.appendChild(rr);
+
         // Reset the canvas transform after drawing.
         this._context.setTransform(1, 0, 0, 1, 0, 0);
         // Set the CSS style of the canvas to the actual measurements.
         this._canvas.style.width = bbox.width;
         this._canvas.style.height = bbox.height;
-        const img = new Image();
-        img.src = this._canvas.toDataURL();
-        document.body.appendChild(img);
+
+        // const img = new Image();
+        // img.src = this._canvas.toDataURL();
+        // document.body.appendChild(img);
+
         // All finished - call the callback if provided.
         if (onFinish) {
             onFinish();
