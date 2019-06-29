@@ -419,7 +419,8 @@ class SvgRenderer {
                     // Give the browser a frame to load embeded raster images.
                     setTimeout(() => {
                         this._cachedJson = item.exportJSON({
-                            bounds: 'content'
+                            bounds: 'content',
+                            asString: false
                         });
 
                         resolve({
