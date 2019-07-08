@@ -7,6 +7,7 @@ const transformStrokeWidths = require('./transform-applier');
 const paper = require('@scratch/paper');
 
 let _project = null;
+let _renderProject = null;
 
 /**
  * Main quirks-mode SVG rendering code.
@@ -134,6 +135,7 @@ class SvgRenderer {
     }
 
     loadPaper (json) {
+        // console.log('loadPaper', json);
         this._cachedImage = null;
         this._cachedJson = json.paper;
         this._measurements = json.measurements;
@@ -401,9 +403,7 @@ class SvgRenderer {
             });
         }
 
-        const svgText = this.toString(false /* shouldInjectFonts */);
-
-        return new Promise (resolve => {
+        return new Promise((resolve, reject) => {
             if (!this._project) {
                 if (!_project) {
                     _project = new paper.Project(new paper.Size(100, 100));
@@ -411,10 +411,16 @@ class SvgRenderer {
                 this._project = _project;
             }
 
+            const svgText = this.toString(false /* shouldInjectFonts */);
+            const measurements = this._measurements;
+
             this._project.importSVG(svgText, {
                 insert: false,
                 onLoad: (item) => {
-                    if (!item) return;
+                    if (!item) {
+                        reject(new Error('Could not load svg into paperjs.'));
+                        return;
+                    }
 
                     // Give the browser a frame to load embeded raster images.
                     setTimeout(() => {
@@ -423,9 +429,19 @@ class SvgRenderer {
                             asString: false
                         });
 
+                        // this._cachedJson = JSON.parse(JSON.stringify({
+                        //     paper: this._cachedJson,
+                        //     measurements: this._measurements
+                        // })).paper;
+
+                        // console.log('loadPaper', {
+                        //     paper: this._cachedJson,
+                        //     measurements
+                        // });
+
                         resolve({
                             paper: this._cachedJson,
-                            measurements: this._measurements
+                            measurements
                         });
                     }, 0);
                 },
@@ -464,14 +480,21 @@ class SvgRenderer {
                 this._project = _project;
             }
 
-            this.toJson().then(() => {
+            const loadImage = () => {
                 this._cachedImage = new paper.Group().importJSON(this._cachedJson, {insert: false});
+                // this._cachedImage = new paper.Group().importJSON(this._cachedJson, {insert: false});
 
-                // Give the browser a frame to load embeded raster images.
+                // Give the browser a frame to load embedded raster images.
                 setTimeout(() => {
                     this._drawFromImage(scale, onFinish);
                 }, 0);
-            });
+            };
+
+            if (this._cachedJson) {
+                loadImage();
+            } else {
+                this.toJson().then(loadImage);
+            }
         }
     }
 
@@ -495,29 +518,34 @@ class SvgRenderer {
         // this._cachedImage.parent.activate();
         // this._cachedImage.parent.setVisible(true);
 
-        this._project.clear();
-        this._project.view.viewSize.set(bbox.width * ratio, bbox.height * ratio);
+        if (!_renderProject) {
+            _renderProject = new paper.Project();
+        }
+        this._renderProject = _renderProject;
 
-        this._project.activeLayer.addChild(this._cachedImage);
+        this._renderProject.clear();
+        this._renderProject.view.viewSize.set(bbox.width * ratio, bbox.height * ratio);
+
+        this._renderProject.activeLayer.addChild(this._cachedImage);
 
         this._context.clearRect(0, 0, this._canvas.width, this._canvas.height);
         if (bbox.width === 0 || bbox.height === 0) return;
         // this._context.scale(ratio, ratio);
         // this._context.drawImage(this._cachedImage, 0, 0);
-        // this._project.view.fitBounds(this._cachedImage.strokeBounds);
-        // this._project.view.transform(new paper.Matrix().translate(this._cachedImage.bounds.center).scale(this._cachedImage.bounds.width, this._cachedImage.bounds.height));
-        this._project.view.matrix.reset();
-        // this._project.view.scale(1 / 10, new paper.Point(0, 0));
+        // this._renderProject.view.fitBounds(this._cachedImage.strokeBounds);
+        // this._renderProject.view.transform(new paper.Matrix().translate(this._cachedImage.bounds.center).scale(this._cachedImage.bounds.width, this._cachedImage.bounds.height));
+        this._renderProject.view.matrix.reset();
+        // this._renderProject.view.scale(1 / 10, new paper.Point(0, 0));
         // const ri = new Image();
         // ri.src = this._cachedImage.rasterize().canvas.toDataURL();
         // document.body.appendChild(ri);
-        // this._cachedImage.fitBounds(this._project.view.bounds);
+        // this._cachedImage.fitBounds(this._renderProject.view.bounds);
         // this._cachedImage.fitBounds(this._cachedImage.strokeBounds);
-        // console.log(this._project.view.viewSize, bbox, this._project.view.matrix, this._cachedImage.bounds);
-        // this._project.addLayer(this._cachedImage);
-        this._project.view.update();
+        // console.log(this._renderProject.view.viewSize, bbox, this._renderProject.view.matrix, this._cachedImage.bounds);
+        // this._renderProject.addLayer(this._cachedImage);
+        this._renderProject.view.update();
         // debugger;
-        this._context.drawImage(this._project.view.element, 0, 0);
+        this._context.drawImage(this._renderProject.view.element, 0, 0);
 
         // this._cachedImage.parent.setVisible(false);
         this._cachedImage.remove();
