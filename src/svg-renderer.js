@@ -486,6 +486,26 @@ class SvgRenderer {
 
                 // Give the browser a frame to load embedded raster images.
                 setTimeout(() => {
+                    const walk = (node, json) => {
+                        if (node.className === 'Raster') {
+                            if (json[1].source && !json[1].imageData) {
+                                json[1].imageData = node.getImageData();
+                                json[1].size = [node.size.width, node.size.height];
+                                json[1].source = null;
+                            }
+                            if (!json[1].source && json[1].imageData) {
+                                node.setImageData(json[1].imageData);
+                            }
+
+                            return [node];
+                            // parent[Object.keys(parent)[index]] = ["Raster", node[1].name];
+                        } else if (node.children && json[1].children) {
+                            return [].concat(...node.children.map((node, i) => walk(node, json[1].children[i])));
+                        }
+                        return [];
+                    };
+                    walk(this._cachedImage, typeof this._cachedJson[0] === 'string' ? this._cachedJson : this._cachedJson[1]);
+
                     this._drawFromImage(scale, onFinish);
                 }, 0);
             };
