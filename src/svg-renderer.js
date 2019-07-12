@@ -429,6 +429,28 @@ class SvgRenderer {
                             asString: false
                         });
 
+                        const walk = (node, json) => {
+                            if (node.className === 'Raster') {
+                                if (json[1].source && !json[1].imageData) {
+                                    json[1].imageData = node.getImageData();
+                                    json[1].pngData = json[1].source.split(/^[^,]*base64,/)[1];
+                                    json[1].source = '';
+                                    json[1].size = [node.size.width, node.size.height];
+                                    // json[1].source = null;
+                                }
+                                // if (!json[1].source && json[1].imageData) {
+                                //     node.setImageData(json[1].imageData);
+                                // }
+
+                                return [node];
+                                // parent[Object.keys(parent)[index]] = ["Raster", node[1].name];
+                            } else if (node.children && json[1].children) {
+                                return [].concat(...node.children.map((node, i) => walk(node, json[1].children[i])));
+                            }
+                            return [];
+                        };
+                        walk(item, typeof this._cachedJson[0] === 'string' ? this._cachedJson : this._cachedJson[1]);
+
                         // this._cachedJson = JSON.parse(JSON.stringify({
                         //     paper: this._cachedJson,
                         //     measurements: this._measurements
@@ -488,12 +510,14 @@ class SvgRenderer {
                 setTimeout(() => {
                     const walk = (node, json) => {
                         if (node.className === 'Raster') {
-                            if (json[1].source && !json[1].imageData) {
-                                json[1].imageData = node.getImageData();
-                                json[1].size = [node.size.width, node.size.height];
-                                json[1].source = null;
-                            }
-                            if (!json[1].source && json[1].imageData) {
+                            // if (json[1].source && !json[1].imageData) {
+                            //     json[1].imageData = node.getImageData();
+                            //     json[1].size = [node.size.width, node.size.height];
+                            //     json[1].source = null;
+                            // }
+                            if (json[1].imageData) {
+                                // json[1].source = null;
+                                // node.size = new paper.Size(json[1].imageData.width, json[1].imageData.height);
                                 node.setImageData(json[1].imageData);
                             }
 
